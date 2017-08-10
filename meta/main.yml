@@ -1,0 +1,32 @@
+---
+
+dependencies:
+
+  - role: debops.secret
+
+galaxy_info:
+  company: 'BetaMachine'
+  author: 'Julien Peeters'
+  description: 'Install phpBB3 instance'
+  license: 'GPL-3.0'
+  min_ansible_version: '2.2.0'
+
+  platforms:
+
+    - name: Debian
+      versions:
+        # Main target, used in production
+        - jessie
+
+        - stretch
+
+    - name: Ubuntu
+      versions:
+        # CI testing target
+        - trusty
+
+  galaxy_tags:
+  - web
+  - php
+  - forum
+  - phpbb

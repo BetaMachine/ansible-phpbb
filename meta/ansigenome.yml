@@ -1,0 +1,17 @@
+---
+
+ansigenome_info:
+  github_url: "https://github.com/betamachine/ansible-phpbb"
+  git_branch: "master"
+
+  travis: False
+
+  authors:
+    - name:  'Julien Peeters'
+      email: 'contact@julienpeeters.net'
+      github: 'jpeeters'
+      twitter: 'julien2peeters'
+
+  synopsis: |
+    This role installs and manages a [phpBB3](https://www.phpbb.org) instance,
+    the famous forum engine in php5.

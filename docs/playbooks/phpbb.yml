@@ -1,0 +1,54 @@
+---
+
+- name: Manage phpBB
+  hosts: [ 'debops_service_phpbb', 'debops_phpbb' ]
+  become: True
+
+  environment: '{{ inventory__environment | d({})
+                 | combine(inventory__group_environment | d({}))
+                 | combine(inventory__host_environment | d({})) }}'
+
+  roles:
+
+    - role: debops.php/env
+      tags: [ 'role::php', 'role::logrotate' ]
+
+    - role: debops.apt_preferences
+      tags: [ 'role::apt_preferences' ]
+      apt_preferences__dependent_list:
+        - '{{ php__apt_preferences__dependent_list }}'
+        - '{{ nginx__apt_preferences__dependent_list }}'
+
+    - role: debops.logrotate
+      tags: [ 'role::logrotate' ]
+      logrotate__dependent_config:
+        - '{{ php__logrotate__dependent_config }}'
+
+    - role: debops.php
+      tags: [ 'role::php' ]
+      php__dependent_packages:
+        - '{{ phpbb__php__dependent_packages }}'
+      php__dependent_pools:
+        - '{{ phpbb__php__dependent_pools }}'
+
+    - role: debops.nginx
+      tags: [ 'role::nginx' ]
+      nginx__dependent_upstreams:
+        - '{{ phpbb__nginx__dependent_upstreams }}'
+      nginx__dependent_servers:
+        - '{{ phpbb__nginx__dependent_servers }}'
+
+    - role: debops.postgresql
+      tags: [ 'role::postgresql' ]
+      postgresql__dependent_roles:
+        - '{{ phpbb__postgresql__dependent_roles }}'
+      postgresql__dependent_groups:
+        - '{{ phpbb__postgresql__dependent_groups }}'
+      postgresql__dependent_databases:
+        - '{{ phpbb__postgresql__dependent_databases }}'
+      postgresql__dependent_pgpass:
+        - '{{ phpbb__postgresql__dependent_pgpass }}'
+      when: phpbb__db_engine == 'postgresql'
+
+    - role: debops.phpbb
+      tags: [ 'role::phpbb' ]

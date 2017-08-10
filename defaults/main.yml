@@ -1,0 +1,322 @@
+---
+
+# .. vim: foldmarker=[[[,]]]:foldmethod=marker
+
+# debops.phpbb default variables [[[
+# ==================================
+
+# .. contents:: Sections
+#    :local:
+#
+# .. include:: includes/all.rst
+
+
+# Basic configuration options [[[
+# -------------------------------
+
+# .. envvar:: phpbb__site_domain [[[
+#
+# Default domain that will be used to host the forum instance.
+phpbb__site_domain: 'forum.{{ ansible_domain }}'
+
+# ]]]
+
+# .. envvar:: phpbb__lang [[[
+#
+# Default lang that will be used to host the forum instance.
+phpbb__lang: 'en'
+
+# ]]]
+
+# .. envvar:: phpbb__db_engine [[[
+#
+# Default db engine that will be used to host the forum instance.
+phpbb__db_engine: 'postgresql'
+
+# ]]]
+# ]]]
+
+# User, group and app directories [[[
+# -----------------------------------
+
+# .. envvar:: phpbb__user [[[
+#
+# phpBB system user account.
+phpbb__user: 'phpbb'
+
+# ]]]
+
+# .. envvar:: phpbb__group [[[
+#
+# phpBB system user group.
+phpbb__group: 'phpbb'
+
+# ]]]
+
+# .. envvar:: phpbb__www_directory [[[
+#
+# Base root web directory for phpBB website.
+phpbb__www_directory: '{{ (ansible_local.nginx.root
+                           if (ansible_local|d() and ansible_local.nginx|d() and
+                               ansible_local.nginx.root|d())
+                           else "/srv/www/" + phpbb__user) }}'
+
+# ]]]
+
+# .. envvar:: phpbb__home_directory [[[
+#
+# Default home directory for phpbb sources.
+phpbb__home_directory: '{{ phpbb__www_directory }}'
+
+# ]]]
+
+# .. envvar:: phpbb__nginx__user [[[
+#
+# phpBB nginx user (requires read-only access to website code).
+phpbb__nginx__user: '{{ ansible_local.nginx.user
+                        if (ansible_local|d() and ansible_local.nginx|d() and
+                            ansible_local.nginx.user|d())
+                        else "www-data" }}'
+# ]]]
+
+# .. envvar:: phpbb__source_version [[[
+#
+# phpBB source version.
+phpbb__source_version: '3.2.0'
+
+# ]]]
+
+# .. envvar:: phpbb__source_url [[[
+#
+# phpBB source url.
+phpbb__source_url: 'https://www.phpbb.com/files/release/phpBB-{{ phpbb__source_version }}.zip'
+
+# ]]]
+
+# .. envvar:: phpbb__source_lang_url [[[
+#
+# phpBB source url.
+phpbb__source_lang_url:
+  'en':
+    '3.2.0': 'https://www.phpbb.com/customise/db/download/135926'
+  'fr':
+    '3.2.0': 'https://www.phpbb.com/customise/db/download/134661'
+
+# ]]]
+
+# .. envvar:: phpbb__max_file_size [[[
+#
+# The maximum size of any acceptable file or upload in MB.
+phpbb__max_file_size: '30'
+
+# ]]]
+
+# ]]]
+
+# Dependent packages [[[
+# ----------------------
+
+# .. envvar:: phpbb__base_packages [[[
+#
+# phpBB base packages to install prior to installation.
+phpbb__base_packages: [ 'unzip', 'imagemagick' ]
+
+# ]]]
+
+# .. envvar:: phpbb__packages [[[
+#
+# phpBB additional packages to install prior to installation.
+phpbb__packages: []
+
+# ]]]
+
+# ]]]
+
+# PHP configuration [[[
+# ---------------------
+
+# .. envvar:: phpbb__php__dependent_packages [[[
+#
+# List of PHP packages to install using debops.php_ role.
+phpbb__php__dependent_packages:
+
+  - [ 'mcrypt', 'ldap', 'json', 'gd', 'imagick', 'pgsql' ]
+
+# ]]]
+
+# .. envvar:: phpbb__php__dependent_pools [[[
+#
+# Configuration of the phpBB PHP-FPM pool managed by the debops.php_ role.
+phpbb__php__dependent_pools:
+
+  - name: 'phpbb'
+    user: '{{ phpbb__user }}'
+    group: '{{ phpbb__group }}'
+
+    php_admin_values:
+      post_max_size:       '{{ phpbb__max_file_size }}'
+      upload_max_filesize: '{{ phpbb__max_file_size }}'
+
+# ]]]
+
+# ]]]
+
+# NGinx configuration [[[
+# -----------------------
+
+# .. envvar:: phpbb__nginx__vhost_filename [[[
+#
+# Default nginx filename
+phpbb__nginx__vhost_filename: 'debops.phpbb'
+
+# ]]]
+
+# .. envvar:: phpbb__nginx__dependent_upstreams [[[
+#
+# Configuration of nginx upstream for phpBB.
+phpbb__nginx__dependent_upstreams:
+
+  - name: 'php_phpbb'
+    type: 'php'
+    php_pool: 'phpbb'
+
+# ]]]
+
+# .. envvar:: phpbb__nginx__dependent_servers [[[
+#
+# Configuration of nginx server for phpBB.
+phpbb__nginx__dependent_servers:
+
+  - name: '{{ phpbb__site_domain }}'
+    filename: '{{ phpbb__nginx__vhost_filename }}'
+    by_role: 'debops.phpbb'
+    type: 'php'
+    root: '{{ phpbb__www_directory }}'
+    index: 'index.php app.php index.html index.htm'
+
+    pki_realm: '{{ phpbb__site_domain }}'
+
+    options: |
+        autoindex off;
+        client_max_body_size {{ phpbb__max_file_size }}M;
+        client_body_buffer_size 128k;
+
+    location:
+
+      '/': |
+          try_files $uri $uri/ @phpbb_rewrite;
+
+      '@phpbb_rewrite': |
+          rewrite ^(.*)$ /app.php/$1 last;
+
+      '~ /(config\.php|common\.php|includes|cache|files|store|images/avatars/uploads)': |
+          deny all;
+          internal;
+
+      '~ \.php(/|$)': |
+          include fastcgi_params;
+          fastcgi_split_path_info ^(.+\.php)(/.*)$;
+          fastcgi_param PATH_INFO $fastcgi_path_info;
+          fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+          fastcgi_param DOCUMENT_ROOT $realpath_root;
+          try_files $uri $uri/ /app.php$is_args$args;
+          fastcgi_pass php_phpbb;
+
+      '/install/': |
+          try_files $uri $uri/ @phpbb_install_rewrite;
+
+          location ~ \.php(/|$) {
+              include fastcgi_params;
+              fastcgi_split_path_info ^(.+\.php)(/.*)$;
+              fastcgi_param PATH_INFO $fastcgi_path_info;
+              fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+              fastcgi_param DOCUMENT_ROOT $realpath_root;
+              try_files $uri $uri/ /install/app.php$is_args$args;
+              fastcgi_pass php_phpbb;
+          }
+
+      '@phpbb_install_rewrite': |
+          rewrite ^(.*)$ /install/app.php/$1 last;
+
+      '~ /\.svn | /\.git': |
+          deny all;
+          internal;
+
+# ]]]
+
+# ]]]
+
+# Postgresql configuration [[[
+# ----------------------------
+
+# .. envvar:: phpbb__postgresql__db_name [[[
+#
+# Sets the postgresql database name
+phpbb__postgresql__db_name: 'phpbb_production'
+
+# ]]]
+
+# .. envvar:: phpbb__postgresql__db_user [[[
+#
+# Sets the postgresql db user
+phpbb__postgresql__db_user: '{{ phpbb__user }}'
+
+# ]]]
+
+# .. envvar:: phpbb__postgresql__db_password [[[
+#
+# Sets the postgresql db password
+phpbb__postgresql__db_password: '{{ lookup("password", secret + "/postgresql/" +
+                                    (ansible_local.postgresql.delegate_to
+                                     if (ansible_local|d() and ansible_local.postgresql|d() and
+                                         ansible_local.postgresql.delegate_to|d())
+                                     else "localhost") + "/" +
+                                    (ansible_local.postgresql.port
+                                     if (ansible_local|d() and ansible_local.postgresql|d() and
+                                         ansible_local.postgresql.port|d())
+                                     else "5432") + "/credentials/" +
+                                    phpbb__postgresql__db_user + "/password length=" + postgresql__password_length|d(20)) }}'
+
+# ]]]
+
+# .. envvar:: phpbb__postgresql__dependent_roles [[[
+#
+# Sets the postgresql dependent roles
+phpbb__postgresql__dependent_roles:
+  - name: '{{ phpbb__postgresql__db_user }}'
+  - name: '{{ phpbb__postgresql__db_name }}'
+    flags: [ 'NOLOGIN' ]
+
+# ]]]
+
+# .. envvar:: phpbb__postgresql__dependent_groups [[[
+#
+# Sets the postgresql db user
+phpbb__postgresql__dependent_groups:
+  - roles: [ '{{ phpbb__postgresql__db_user }}' ]
+    groups: [ '{{ phpbb__postgresql__db_name }}' ]
+    database: '{{ phpbb__postgresql__db_name }}'
+
+# ]]]
+
+# .. envvar:: phpbb__postgresql__dependent_databases [[[
+#
+# Sets the postgresql db user
+phpbb__postgresql__dependent_databases:
+  - name: '{{ phpbb__postgresql__db_name }}'
+    owner: '{{ phpbb__postgresql__db_name }}'
+
+# ]]]
+
+# .. envvar:: phpbb__postgresql__dependent_pgpass [[[
+#
+# Sets the postgresql db user
+phpbb__postgresql__dependent_pgpass:
+  - owner: '{{ phpbb__user }}'
+    group: '{{ phpbb__group }}'
+    home: '{{ phpbb__home_directory }}'
+    system: True
+
+# ]]]
+
+# ]]]

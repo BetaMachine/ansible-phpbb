@@ -1,0 +1,55 @@
+---
+
+- name: Install requested packages
+  apt:
+    name: '{{ item }}'
+    state: present
+    install_recommends: False
+  with_flattened:
+    - '{{ phpbb__base_packages }}'
+    - '{{ phpbb__packages }}'
+
+- name: Create phpbb group
+  group:
+    name: '{{ phpbb__group }}'
+    system: True
+    state: present
+
+- name: Create phpbb user
+  user:
+    name: '{{ phpbb__user }}'
+    group: '{{ phpbb__group }}'
+    home: '{{ phpbb__home_directory }}'
+    shell: '/bin/false'
+    comment: 'phpBB'
+    createhome: False
+    system: True
+    state: present
+
+- name: Create phpBB source directory
+  file:
+    path: '{{ phpbb__www_directory }}'
+    state: directory
+    owner: '{{ phpbb__user }}'
+    group: '{{ phpbb__group }}'
+    mode: 0750
+
+- name: Download phpBB sources
+  unarchive:
+    src: '{{ phpbb__source_url }}'
+    dest: '/tmp/'
+    remote_src: True
+    owner: '{{ phpbb__user }}'
+    group: '{{ phpbb__group }}'
+    mode: 0750
+
+- name: Install phpBB sources
+  shell: 'cp -r /tmp/phpBB*/* {{ phpbb__www_directory }}/'
+
+- name: Download and install language packs
+  unarchive:
+    src: '{{ phpbb__source_lang_url[phpbb__lang][phpbb__source_version] }}'
+    dest: '{{ phpbb__www_directory }}'
+    remote_src: True
+    owner: '{{ phpbb__user }}'
+    group: '{{ phpbb__group }}'
